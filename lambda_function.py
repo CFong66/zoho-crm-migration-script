@@ -17,7 +17,7 @@ secrets_client = boto3.client('secretsmanager', region_name = region_name)
 
 # Configuration
 zoho_base_url = "https://www.zohoapis.com.au/crm/v2/Leads"
-s3_bucket_name = "zoho-migration-cf-log"
+s3_bucket_name = "zoho-mig-mgdb-cf-log"
 data_discrepancies_key = "discrepancies.json"
 s3_key_leads = f"leads_{datetime.now().strftime('%Y-%m-%d')}.json"
 ca_lambda_bundle_path = "/tmp/global-bundle.pem"

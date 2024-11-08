@@ -10,9 +10,10 @@ from pymongo import MongoClient
 # from aws_util import log_error, send_metrics_to_cloudwatch, save_log_to_s3
 
 # AWS clients
+region_name='ap-southeast-2'
 s3_client = boto3.client('s3')
 cloudwatch_client = boto3.client('cloudwatch')
-secrets_client = boto3.client('secretsmanager', region_name='ap-southeast-2')
+secrets_client = boto3.client('secretsmanager', region_name = region_name)
 
 # Configuration
 zoho_base_url = "https://www.zohoapis.com.au/crm/v2/Leads"
@@ -20,7 +21,7 @@ s3_bucket_name = "zoho-migration-cf-log"
 data_discrepancies_key = "discrepancies.json"
 s3_key_leads = f"leads_{datetime.now().strftime('%Y-%m-%d')}.json"
 ca_lambda_bundle_path = "/tmp/global-bundle.pem"
-ca_ec2_bundle_path = "/home/ubuntu/etl/zoho-etl-script/etl/global-bundle.pem"
+ca_ec2_bundle_path = "/home/ubuntu/etl/zoho-crm-migration-script/etl/global-bundle.pem"
 status_key = "etl_status.json"
 count_discrepancies_key = "count_discrepancies.json"
 cluster_identifier      = "docdb-cluster"
@@ -90,7 +91,8 @@ def send_metrics_to_cloudwatch(
     """
     try:
         response = cloudwatch_client.put_metric_data(
-            Namespace=namespace,
+            region_name = region_name,
+            Namespace = namespace,
             MetricData=[
                 {
                     'MetricName': metric_name,

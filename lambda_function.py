@@ -261,18 +261,27 @@ def get_mongo_credentials():
 
 # Connect to MongoDB and get the leads collection
 def get_leads_collection():
-    # Get the DocumentDB URI
-    # documentdb_uri = get_documentdb_uri(cluster_identifier)
+    # Get MongoDB credentials
     username, password, host, port = get_mongo_credentials()
     database = "zoho_crm"
 
+    # Construct the MongoDB URI with TLS settings
     mongo_uri = f"mongodb://{username}:{password}@{host}:{port}/{database}?tls=true&retryWrites=false&tlsCAFile={ca_ec2_bundle_path}"
     client = pymongo.MongoClient(mongo_uri)
 
+    # Access the database and the 'leads' collection
     db = client[database]
-    collection = db['leads']
+    collection_name = "leads"
+    
+    # Check if the 'leads' collection exists; if not, create it
+    if collection_name not in db.list_collection_names():
+        print(f"Creating collection '{collection_name}' in MongoDB.")
+        db.create_collection(collection_name)
+    else:
+        print(f"Collection '{collection_name}' already exists in MongoDB.")
 
-    return collection
+    # Return the collection object
+    return db[collection_name]
 
 # Retrieve leads from MongoDB
 def get_mongo_leads():
@@ -286,7 +295,7 @@ def validate_data():
     zoho_leads = fetch_leads(num_fetch_data)  # Fetch fresh data from Zoho
 
     discrepancies = []
-    required_fields = ["Email", "Lead_Status", "Phone"]
+    required_fields = ["Last_Name", "First_Name", "Email", "Phone"]
 
     for zoho_lead in zoho_leads:
         email = zoho_lead.get("Email")

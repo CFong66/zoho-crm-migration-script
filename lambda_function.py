@@ -1,6 +1,7 @@
 
 import logging
 import json
+import hashlib
 import boto3
 import requests
 from datetime import datetime
@@ -10,23 +11,24 @@ from pymongo import MongoClient
 import pymongo
 # from aws_util import log_error, send_metrics_to_cloudwatch, save_log_to_s3
 
-# AWS clients
-region_name='ap-southeast-2'
+# AWS clients (all start with 'c')
+region_name = 'ap-southeast-2'
+cloudwatch_client = boto3.client('cloudwatch', region_name=region_name)
 s3_client = boto3.client('s3')
-cloudwatch_client = boto3.client('cloudwatch', region_name = region_name)
-secrets_client = boto3.client('secretsmanager', region_name = region_name)
+secrets_client = boto3.client('secretsmanager', region_name=region_name)
 
-# Configuration
-zoho_base_url = "https://www.zohoapis.com.au/crm/v2/Leads"
-s3_bucket_name = "zoho-mig-mgdb-cf-log"
-data_discrepancies_key = "discrepancies.json"
-s3_key_leads = f"leads_{datetime.now().strftime('%Y-%m-%d')}.json"
-ca_lambda_bundle_path = "/tmp/global-bundle.pem"
+# Configuration (all start with 'c', 'd', 'n', 's', 'z')
 ca_ec2_bundle_path = "/home/ubuntu/etl/global-bundle.pem"
-status_key = "etl_status.json"
-count_discrepancies_key = "count_discrepancies.json"
-cluster_identifier      = "docdb-cluster"
-num_fetch_data = 4000
+ca_lambda_bundle_path = "/tmp/global-bundle.pem"
+cluster_identifier = "docdb-cluster"
+count_discrepancies_key = f"count/count_discrepancies_{datetime.now().strftime('%Y-%m-%d')}.json"
+data_discrepancies_key = f"disrepancies/discrepancies_{datetime.now().strftime('%Y-%m-%d')}.json"
+num_fetch_data = 250
+
+s3_bucket_name = "zoho-mig-mgdb-cf-log"
+s3_key_backup_leads = f"backup/leads_{datetime.now().strftime('%Y-%m-%d')}.json"
+status_key = "etl_status/etl_status.json"
+zoho_base_url = "https://www.zohoapis.com.au/crm/v2/Leads"
 
 # Set up the logging configuration
 logging.basicConfig(level=logging.INFO)
@@ -53,10 +55,18 @@ def log_error(error_message, record=None):
     save_log_to_s3(log_entry)
 
 def save_log_to_s3(log_entry):
-    # Check for "error_message" key and default to an empty string if it's missing
-    brief_error = log_entry.get("error_message", "").replace(" ", "_").replace("/", "_")[:50]  # Truncate to 50 characters for readability
-    
-    s3_key = f"logs/{datetime.now().strftime('%Y-%m-%d')}/error_{brief_error}_{datetime.now().strftime('%H-%M-%S')}.json"
+    # Set the log file name based on status
+    status = log_entry.get("status", "IN_PROGRESS")
+
+    if status == "ERROR":
+        # Use error-specific file name
+        brief_error = log_entry.get("error", "").replace(" ", "_").replace("/", "_")[:20]  # Truncate to 50 characters for readability
+        s3_key = f"logs/{datetime.now().strftime('%Y-%m-%d')}/error_{brief_error}.json"
+
+    else:
+        # Use success-specific file name
+        brief_message = log_entry.get("message", "").replace(" ", "_").replace("/", "_")[:20]
+        s3_key = f"logs/{datetime.now().strftime('%Y-%m-%d')}/success_{brief_message}.json"
 
     try:
         s3_client.put_object(
@@ -229,25 +239,32 @@ def fetch_leads(max_records=10000):
     access_token = get_access_token()
     headers = {"Authorization": f"Zoho-oauthtoken {access_token}"}
     leads, page, per_page = [], 1, 200
-    params = {"fields": "First_Name,Last_Name,Email,Phone,Company,Industry,Lead_Status", "per_page": per_page, "page": page}
+    params = {"fields": "First_Name,Last_Name,Email,Phone,Company,Industry,Lead_Status", 
+              "per_page": per_page}
 
     while len(leads) < max_records:
+        params["page"] = page
         response = requests.get(zoho_base_url, headers=headers, params=params)
         data = response.json()
         if 'data' in data:
             leads.extend(data['data'])
             send_metrics_to_cloudwatch("RecordsProcessed", len(data["data"]))
+            page += 1
+
+            # Stop if max_records is reached
             if len(leads) >= max_records:
                 leads = leads[:max_records]
                 break
-            page += 1
-            params["page"] = page
         else:
             break
 
     # Save leads to S3
-    s3_client.put_object(Bucket=s3_bucket_name, Key=s3_key_leads, Body=json.dumps(leads))
-    save_log_to_s3({"stage": "Extraction", "timestamp": str(datetime.now()), "record_count": len(leads), "status": "Data fetched"})
+    s3_client.put_object(Bucket=s3_bucket_name, Key=s3_key_backup_leads, Body=json.dumps(leads))
+    save_log_to_s3({
+        "stage": "Extraction", 
+        "timestamp": str(datetime.now()), 
+        "record_count": len(leads), 
+        "status": "Data fetched"})
     
     return leads
 
@@ -332,6 +349,108 @@ def validate_data():
         }
         save_log_to_s3(log_entry)
 
+
+# """
+# use below 3 functions only if the etl job can load all the records in one go
+# """
+# def calculate_md5(data):
+#     """Helper function to calculate MD5 checksum of a JSON-like data structure."""
+#     md5 = hashlib.md5()
+#     md5.update(json.dumps(data, sort_keys=True).encode('utf-8'))
+#     return md5.hexdigest()
+
+# def load_backup_data_from_s3():
+#     """Load the backup JSON data file from S3."""
+#     response = s3_client.get_object(Bucket=s3_bucket_name, Key=s3_key_backup_leads)
+#     return json.loads(response['Body'].read())
+
+# def validate_data():
+#     # Load backup data from S3
+#     try:
+#         zoho_backup_data = load_backup_data_from_s3()
+#         zoho_data_count = len(zoho_backup_data)
+#         zoho_data_md5 = calculate_md5(zoho_backup_data)
+#     except Exception as e:
+#         log_entry = {
+#             "stage": "Validation",
+#             "timestamp": str(datetime.now()),
+#             "status": f"Failed to load backup data from S3: {e}"
+#         }
+#         save_log_to_s3(log_entry)
+#         return
+
+#     # Load data from MongoDB
+#     mongo_leads = get_mongo_leads()
+#     mongo_data_count = len(mongo_leads)
+#     mongo_data_md5 = calculate_md5(mongo_leads)
+
+#     # Compare record counts
+#     if zoho_data_count != mongo_data_count:
+#         log_entry = {
+#             "stage": "Validation",
+#             "timestamp": str(datetime.now()),
+#             "status": "Record count mismatch",
+#             "zoho_count": zoho_data_count,
+#             "mongo_count": mongo_data_count
+#         }
+#         save_log_to_s3(log_entry)
+
+#     # Compare checksums for data integrity
+#     elif zoho_data_md5 != mongo_data_md5:
+#         log_entry = {
+#             "stage": "Validation",
+#             "timestamp": str(datetime.now()),
+#             "status": "Data integrity mismatch",
+#             "zoho_md5": zoho_data_md5,
+#             "mongo_md5": mongo_data_md5
+#         }
+#         save_log_to_s3(log_entry)
+
+#     else:
+#         # Field-level validation
+#         discrepancies = []
+#         required_fields = ["Last_Name", "First_Name", "Email", "Phone"]
+
+#         for zoho_lead in zoho_backup_data:
+#             email = zoho_lead.get("Email")
+#             mongo_lead = mongo_leads.get(email)
+            
+#             if not mongo_lead:
+#                 discrepancies.append({"Email": email, "error": "Missing in MongoDB"})
+#                 continue
+
+#             for field in required_fields:
+#                 if mongo_lead.get(field) != zoho_lead.get(field):
+#                     discrepancies.append({
+#                         "Email": email,
+#                         "field": field,
+#                         "zoho_value": zoho_lead.get(field),
+#                         "mongo_value": mongo_lead.get(field)
+#                     })
+
+#         # Save discrepancies to S3 if any are found
+#         if discrepancies:
+#             s3_client.put_object(Bucket=s3_bucket_name, Key=data_discrepancies_key, Body=json.dumps(discrepancies))
+#             log_entry = {
+#                 "stage": "Validation",
+#                 "timestamp": str(datetime.now()),
+#                 "status": "Discrepancies found",
+#                 "discrepancies": discrepancies
+#             }
+#             save_log_to_s3(log_entry)
+#         else:
+#             log_entry = {
+#                 "stage": "Validation",
+#                 "timestamp": str(datetime.now()),
+#                 "status": "Validation successful, no discrepancies found"
+#             }
+#             save_log_to_s3(log_entry)
+# """
+# use above 3 functions only if the etl job can load all the records in one go
+# """
+
+
+
 # Incremental load new data into MongoDB
 def incremental_load(leads):
     existing_emails = get_mongo_leads().keys()
@@ -356,54 +475,59 @@ def incremental_load(leads):
 # Main ETL function
 def lambda_handler(event, context):
     try:
-        logging.info("Starting ETL process")
+        # Start of ETL
+        print("ETL process started.")
         save_log_to_s3_with_stage("ETL Start", "Starting ETL process")
 
         # Check ETL status
+        print("Checking ETL status...")
         etl_status = load_etl_status_from_s3()
         if not etl_status.get("run_etl", True):
             print("ETL job skipped due to matching record count.")
-            logging.info("ETL job skipped due to matching record count.")
-            save_log_to_s3_with_stage("ETL Skipped", "ETL job skipped due to matching record count.", status="SKIPPED")
             return
+        print("ETL status check complete. Proceeding with ETL job.")
 
         # Fetch data
-        logging.info("Fetching leads")
-        save_log_to_s3_with_stage("Data Fetch", "Fetching leads from Zoho CRM")
+        print("Fetching leads data...")
         leads = fetch_leads(num_fetch_data)
+        print("Data fetch complete.")
 
         # Perform incremental load
-        logging.info("Incremental load of leads")
-        save_log_to_s3_with_stage("Data Load", "Performing incremental load of leads")
+        print("Performing incremental load...")
         incremental_load(leads)
+        print("Incremental load complete.")
 
         # Validate data
-        logging.info("Validating data")
-        save_log_to_s3_with_stage("Data Validation", "Validating loaded data")
+        print("Validating data...")
         validate_data()
+        print("Data validation complete.")
 
         # Check and compare record counts
+        print("Comparing record counts...")
         if check_record_count():
-            update_etl_status_in_s3(run_etl=False)  # Stop ETL job if counts match
-            logging.info("Record counts match; stopping ETL job.")
+            print("Record counts match. Updating ETL status and stopping ETL job.")
+            update_etl_status_in_s3(run_etl=False)
             save_log_to_s3_with_stage("ETL Stop", "Record counts match. ETL job stopped.", status="COMPLETED")
 
             # Send notification about the completion of the ETL process
+            print("Sending success notification...")
             send_notification("ETL project completed successfully. MongoDB record count matches Zoho CRM.")
-
         else:
-            update_etl_status_in_s3(run_etl=True)  # Allow ETL job to continue
-            logging.info("Record counts do not match; ETL job will continue.")
+            print("Record counts do not match. Updating ETL status to continue ETL job.")
+            update_etl_status_in_s3(run_etl=True)
             save_log_to_s3_with_stage("ETL Continue", "Record counts do not match. ETL job will continue.", status="IN_PROGRESS")
 
         # Final log entry for successful completion
+        print("ETL process completed successfully.")
         log_entry = {
             "stage": "ETL Completion",
             "timestamp": str(datetime.now()),
             "status": "ETL process completed successfully"
         }
         save_log_to_s3(log_entry)
+
     except Exception as e:
+        print("An error occurred during the ETL process.")
         error_log = {
             "stage": "ETL Failure",
             "timestamp": str(datetime.now()),
@@ -411,6 +535,7 @@ def lambda_handler(event, context):
         }
         save_log_to_s3(error_log)
         raise e
+
 
 if __name__ == "__main__":
     lambda_handler({}, {})

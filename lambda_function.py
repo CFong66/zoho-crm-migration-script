@@ -52,8 +52,8 @@ def log_error(error_message, record=None):
     save_log_to_s3(log_entry)
 
 def save_log_to_s3(log_entry):
-    # Shorten and sanitize the error message for S3 filename compatibility
-    brief_error = log_entry["error_message"].replace(" ", "_").replace("/", "_")[:50]  # Truncate to 50 characters for readability
+    # Check for "error_message" key and default to an empty string if it's missing
+    brief_error = log_entry.get("error_message", "").replace(" ", "_").replace("/", "_")[:50]  # Truncate to 50 characters for readability
     
     s3_key = f"logs/{datetime.now().strftime('%Y-%m-%d')}/error_{brief_error}_{datetime.now().strftime('%H-%M-%S')}.json"
 

@@ -18,7 +18,7 @@ s3_client = boto3.client('s3')
 secrets_client = boto3.client('secretsmanager', region_name=region_name)
 
 # Configuration (all start with 'c', 'd', 'n', 's', 'z')
-ca_ec2_bundle_path = "/home/ubuntu/etl/global-bundle.pem"
+ca_ec2_bundle_path = "/home/ubuntu/etl/zoho-crm-migration-script/global-bundle.pem"
 ca_lambda_bundle_path = "/tmp/global-bundle.pem"
 cluster_identifier = "docdb-cluster"
 count_discrepancies_key = f"count/count_discrepancies_{datetime.now().strftime('%Y-%m-%d')}.json"

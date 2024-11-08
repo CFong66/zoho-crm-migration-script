@@ -172,11 +172,12 @@ def update_etl_status_in_s3(run_etl):
 # Check if MongoDB count matches Zoho count and log
 def check_record_count():
     # MongoDB connection
-    username, password, host, port, database = get_mongo_credentials()
+    username, password, host, port = get_mongo_credentials()
+    database = "zoho_crm"
     mongo_uri = f"mongodb://{username}:{password}@{host}:{port}/{database}?tls=true&retryWrites=false&tlsCAFile={ca_ec2_bundle_path}"
     client = MongoClient(mongo_uri)
-    db = client["zoho_crm"]
-    leads_collection = db["leads"]
+    db_collection = client[database]
+    leads_collection = db_collection["leads"]
 
     # Count records in MongoDB
     mongo_count = leads_collection.count_documents({})

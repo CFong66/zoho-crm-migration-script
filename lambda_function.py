@@ -91,7 +91,6 @@ def send_metrics_to_cloudwatch(
     """
     try:
         response = cloudwatch_client.put_metric_data(
-            region_name = region_name,
             Namespace = namespace,
             MetricData=[
                 {

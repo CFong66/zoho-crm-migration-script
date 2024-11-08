@@ -12,7 +12,7 @@ from pymongo import MongoClient
 # AWS clients
 region_name='ap-southeast-2'
 s3_client = boto3.client('s3')
-cloudwatch_client = boto3.client('cloudwatch')
+cloudwatch_client = boto3.client('cloudwatch', region_name = region_name)
 secrets_client = boto3.client('secretsmanager', region_name = region_name)
 
 # Configuration
@@ -68,7 +68,7 @@ def save_log_to_s3(log_entry):
         print("Credentials not available for S3: ", e)
 
 # Initialize CloudWatch client
-cloudwatch_client = boto3.client('cloudwatch', region_name='ap-southeast-2')
+cloudwatch_client = boto3.client('cloudwatch', region_name=region_name)
 
 def send_metrics_to_cloudwatch(
     metric_name, 

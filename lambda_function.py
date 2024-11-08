@@ -7,6 +7,7 @@ from datetime import datetime
 from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError, ClientError
 from pymongo import MongoClient
+import pymongo
 # from aws_util import log_error, send_metrics_to_cloudwatch, save_log_to_s3
 
 # AWS clients
@@ -124,26 +125,26 @@ def get_access_token():
     response = requests.post(token_url)
     return response.json()["access_token"]
 
-# get the document db uri
-def get_documentdb_uri(cluster_identifier):
-    try:
-        # Initialize Boto3 client for RDS (which includes DocumentDB)
-        rds_client = boto3.client('rds')
+# # get the document db uri
+# def get_documentdb_uri(cluster_identifier):
+#     try:
+#         # Initialize Boto3 client for RDS (which includes DocumentDB)
+#         rds_client = boto3.client('rds')
         
-        # Describe the DocumentDB cluster
-        response = rds_client.describe_db_clusters(DBClusterIdentifier=cluster_identifier)
+#         # Describe the DocumentDB cluster
+#         response = rds_client.describe_db_clusters(DBClusterIdentifier=cluster_identifier)
         
-        # Extract the endpoint
-        endpoint = response['DBClusters'][0]['Endpoint']
-        port = response['DBClusters'][0]['Port']
+#         # Extract the endpoint
+#         endpoint = response['DBClusters'][0]['Endpoint']
+#         port = response['DBClusters'][0]['Port']
         
-        # Construct the MongoDB URI
-        uri = f"mongodb://{endpoint}:{port}"
+#         # Construct the MongoDB URI
+#         uri = f"mongodb://{endpoint}:{port}"
         
-        return uri
-    except ClientError as e:
-        print(f"Error getting DocumentDB URI: {e}")
-        return None
+#         return uri
+#     except ClientError as e:
+#         print(f"Error getting DocumentDB URI: {e}")
+#         return None
 
 # Download CA certificate for MongoDB
 def download_ca_certificate():
@@ -260,10 +261,10 @@ def get_mongo_credentials():
 # Connect to MongoDB and get the leads collection
 def get_leads_collection():
     # Get the DocumentDB URI
-    documentdb_uri = get_documentdb_uri(cluster_identifier)
+    # documentdb_uri = get_documentdb_uri(cluster_identifier)
     username, password, host, port = get_mongo_credentials()
 
-    client = MongoClient(documentdb_uri, username=username, password=password, tls=True, tlsAllowInvalidCertificates=True)
+    client = pymongo.MongoClient(f'mongodb://{username}:{password}@sample-cluster.node.{region_name}.docdb.amazonaws.com:{port}/?replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false')
     database = "zoho_crm"
     db = client[database]
     collection = db['leads']

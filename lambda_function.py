@@ -68,7 +68,7 @@ def save_log_to_s3(log_entry):
         print("Credentials not available for S3: ", e)
 
 # Initialize CloudWatch client
-cloudwatch_client = boto3.client('cloudwatch', region_name=region_name)
+# cloudwatch_client = boto3.client('cloudwatch', region_name=region_name)
 
 def send_metrics_to_cloudwatch(
     metric_name, 

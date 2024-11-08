@@ -263,9 +263,11 @@ def get_leads_collection():
     # Get the DocumentDB URI
     # documentdb_uri = get_documentdb_uri(cluster_identifier)
     username, password, host, port = get_mongo_credentials()
-
-    client = pymongo.MongoClient(f'mongodb://{username}:{password}@{cluster_identifier}.node.{region_name}.docdb.amazonaws.com:{port}/?replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false')
     database = "zoho_crm"
+    
+    mongo_uri = f"mongodb://{username}:{password}@{host}:{port}/{database}?tls=true&retryWrites=false&tlsCAFile={ca_ec2_bundle_path}"
+    client = pymongo.MongoClient(mongo_uri)
+
     db = client[database]
     collection = db['leads']
 

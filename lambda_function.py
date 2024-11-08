@@ -22,7 +22,7 @@ s3_bucket_name = "zoho-mig-mgdb-cf-log"
 data_discrepancies_key = "discrepancies.json"
 s3_key_leads = f"leads_{datetime.now().strftime('%Y-%m-%d')}.json"
 ca_lambda_bundle_path = "/tmp/global-bundle.pem"
-ca_ec2_bundle_path = "/home/ubuntu/etl/zoho-crm-migration-script/etl/global-bundle.pem"
+ca_ec2_bundle_path = "/home/ubuntu/etl/global-bundle.pem"
 status_key = "etl_status.json"
 count_discrepancies_key = "count_discrepancies.json"
 cluster_identifier      = "docdb-cluster"
@@ -264,7 +264,7 @@ def get_leads_collection():
     # documentdb_uri = get_documentdb_uri(cluster_identifier)
     username, password, host, port = get_mongo_credentials()
     database = "zoho_crm"
-    
+
     mongo_uri = f"mongodb://{username}:{password}@{host}:{port}/{database}?tls=true&retryWrites=false&tlsCAFile={ca_ec2_bundle_path}"
     client = pymongo.MongoClient(mongo_uri)
 
